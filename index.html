@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tic Tac Toe</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+      background: #f0f0f0;
+    }
+
+    h1 {
+      margin-bottom: 10px; 
+    }
+
+    #modeSelect {
+      margin-bottom: 15px;
+    }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(3, 100px);
+      grid-template-rows: repeat(3, 100px);
+      gap: 5px;
+    }
+
+    .cell {
+      width: 100px;
+      height: 100px;
+      background: white;
+      border: 2px solid #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 2rem;
+      cursor: pointer;
+    }
+
+    #winningText {
+      margin-top: 15px;
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 8px 16px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Tic Tac Toe</h1>
+  <a href="project2.html">Play Online Multiplayer</a>
+
+  <div id="modeSelect">
+    <label>
+      <input type="radio" name="mode" value="pvp" checked> Player vs Player
+    </label>
+    <label>
+      <input type="radio" name="mode" value="ai"> Player vs Computer
+    </label>
+  </div>
+
+  <div id="board"></div>
+  <div id="winningText"></div>
+  <button onclick="restartGame()">Restart Game</button>
+
+  <script>
+    let cells = ["", "", "", "", "", "", "", "", ""];
+    let currentplayer = "X";
+    let gameactive = true;
+    let mode = "pvp"; // default Player vs Player
+
+    const winningText = document.getElementById("winningText");
+    const board = document.getElementById("board");
+    const modeRadios = document.querySelectorAll("input[name='mode']");
+
+    const winningConditions = [
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6]
+    ];
+
+    modeRadios.forEach(radio => {
+      radio.addEventListener("change", () => {
+        mode = document.querySelector("input[name='mode']:checked").value;
+        restartGame();
+      });
+    });
+
+    function createBoard() {
+      board.innerHTML = "";
+      cells.forEach((cell, index) => {
+        const cellElement = document.createElement("div");
+        cellElement.classList.add("cell");
+        cellElement.dataset.index = index;
+        cellElement.innerText = cell;
+        cellElement.addEventListener("click", handleClick);
+        board.appendChild(cellElement);
+      });
+    }
+
+    function handleClick(e) {
+      const index = e.target.dataset.index;
+
+      if (cells[index] !== "" || !gameactive) return;
+
+      if (mode === "pvp") {
+        makeMove(index, currentplayer);
+      } else if (mode === "ai" && currentplayer === "X") {
+        makeMove(index, "X");
+        if (gameactive) {
+          setTimeout(computerMove, 500);
+        }
+      }
+    }
+
+    function makeMove(index, player) {
+      cells[index] = player;
+      document.querySelector(`[data-index='${index}']`).innerText = player;
+
+      if (checkWin(player)) {
+        winningText.innerText = player + " Wins!";
+        gameactive = false;
+        return;
+      }
+
+      if (!cells.includes("")) {
+        winningText.innerText = "It's a Draw!";
+        gameactive = false;
+        return;
+      }
+
+      currentplayer = player === "X" ? "O" : "X";
+    }
+
+    function checkWin(player) {
+      return winningConditions.some(condition =>
+        condition.every(index => cells[index] === player)
+      );
+    }
+
+    function computerMove() {
+      if (!gameactive) return;
+
+      // Try to win
+      for (let condition of winningConditions) {
+        let [a, b, c] = condition;
+        let values = [cells[a], cells[b], cells[c]];
+        if (values.filter(v => v === "O").length === 2 && values.includes("")) {
+          let index = condition[values.indexOf("")];
+          makeMove(index, "O");
+          return;
+        }
+      }
+
+      // Try to block player
+      for (let condition of winningConditions) {
+        let [a, b, c] = condition;
+        let values = [cells[a], cells[b], cells[c]];
+        if (values.filter(v => v === "X").length === 2 && values.includes("")) {
+          let index = condition[values.indexOf("")];
+          makeMove(index, "O");
+          return;
+        }
+      }
+
+      // Else pick random
+      let emptyCells = cells
+        .map((val, idx) => (val === "" ? idx : null))
+        .filter(v => v !== null);
+
+      let randomIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+      makeMove(randomIndex, "O");
+    }
+
+    function restartGame() {
+      cells = ["", "", "", "", "", "", "", "", ""];
+      currentplayer = "X";
+      gameactive = true;
+      winningText.innerText = "";
+      createBoard()
+    }
+    createBoard();
+
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tic Tac Toe Firebase Multiplayer</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        #game { margin-top: 20px; display: inline-block; }
+        #board { 
+            display: grid; 
+            grid-template-columns: repeat(3, 100px); 
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            margin-top: 15px;
+        }
+        .cell {
+            background: #eee;
+            font-size: 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            border-radius: 8px;
+            box-shadow: 0 0 5px #bbb;
+        }
+        .cell.disabled {
+            cursor: not-allowed;
+            color: #999;
+        }
+        #status { margin-top: 15px; font-weight: bold; }
+        #room-controls { margin-bottom: 15px; }
+        input { padding: 5px; font-size: 1rem; }
+        button { padding: 5px 10px; font-size: 1rem; margin-left: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<h1>Tic Tac Toe Online</h1>
+
+<div id="room-controls">
+    <button id="createRoomBtn">Create Room</button>
+    <input id="roomInput" placeholder="Enter room code" maxlength="4" />
+    <button id="joinRoomBtn">Join Room</button>
+</div>
+
+<div id="status">Please create or join a room to start playing.</div>
+
+<div id="game" style="display:none;">
+    <div id="board"></div>
+    <button id="resetBtn" style="margin-top: 10px;">Reset Game</button>
+</div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-database-compat.js"></script>
+
+<script>
+  // Your Firebase config here
+  const firebaseConfig = {
+    apiKey: "AIzaSyDGCCc_j-j__TWHjcoKvrk-M-vZ9QeU-ZM",
+    authDomain: "tic-tac-toe-appss.firebaseapp.com",
+    databaseURL: "https://tic-tac-toe-appss-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tic-tac-toe-appss",
+    storageBucket: "tic-tac-toe-appss.firebasestorage.app",
+    messagingSenderId: "529260289900",
+    appId: "1:529260289900:web:4c826625179d2284fb1d49",
+    measurementId: "G-3XY65YM4PK"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // UI Elements
+  const createRoomBtn = document.getElementById('createRoomBtn');
+  const joinRoomBtn = document.getElementById('joinRoomBtn');
+  const roomInput = document.getElementById('roomInput');
+  const statusDiv = document.getElementById('status');
+  const gameDiv = document.getElementById('game');
+  const boardDiv = document.getElementById('board');
+  const resetBtn = document.getElementById('resetBtn');
+
+  // Game variables
+  let currentRoom = null;
+  let playerSymbol = null;  // 'X' or 'O'
+  let currentPlayerTurn = null;
+  let board = Array(9).fill("");
+  let gameActive = false;
+
+  // Create 3x3 board UI
+  function createBoardUI() {
+    boardDiv.innerHTML = "";
+    for (let i = 0; i < 9; i++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      cell.dataset.index = i;
+      cell.innerText = "";
+      cell.onclick = () => cellClicked(i);
+      boardDiv.appendChild(cell);
+    }
+  }
+
+  function cellClicked(i) {
+    if (!gameActive) return;
+    if (playerSymbol !== currentPlayerTurn) {
+      alert("Wait for your turn!");
+      return;
+    }
+    if (board[i] !== "") return; // already filled
+
+    board[i] = playerSymbol;
+    updateBoardUI();
+
+    // Update Firebase board and switch turn there
+    const nextPlayer = playerSymbol === "X" ? "O" : "X";
+    db.ref(`rooms/${currentRoom}`).update({
+      board: board,
+      currentPlayer: nextPlayer
+    });
+  }
+
+  function updateBoardUI() {
+    const cells = boardDiv.querySelectorAll(".cell");
+    cells.forEach((cell, idx) => {
+      cell.innerText = board[idx];
+      cell.classList.toggle("disabled", board[idx] !== "" || !gameActive);
+    });
+  }
+
+  function updateStatus(text) {
+    if (text) {
+      statusDiv.innerText = text;
+      return;
+    }
+    if (!gameActive) {
+      statusDiv.innerText = "Game over or no active game.";
+      return;
+    }
+    if (playerSymbol === currentPlayerTurn) {
+      statusDiv.innerText = "Your turn (" + playerSymbol + ")";
+    } else {
+      statusDiv.innerText = "Opponent's turn (" + currentPlayerTurn + ")";
+    }
+  }
+
+  // Check for win or draw
+  function checkWin(board, symbol) {
+    const winPatterns = [
+      [0,1,2],[3,4,5],[6,7,8],  // rows
+      [0,3,6],[1,4,7],[2,5,8],  // cols
+      [0,4,8],[2,4,6]           // diagonals
+    ];
+    return winPatterns.some(pattern => pattern.every(idx => board[idx] === symbol));
+  }
+
+  function checkDraw(board) {
+    return board.every(cell => cell !== "");
+  }
+
+  // Listen for changes on Firebase room data
+  function listenToRoom(roomCode) {
+    const roomRef = db.ref(`rooms/${roomCode}`);
+    roomRef.on('value', snapshot => {
+      const data = snapshot.val();
+      if (!data) {
+        statusDiv.innerText = "Room closed or doesn't exist.";
+        gameActive = false;
+        updateBoardUI();
+        return;
+      }
+
+      board = data.board || Array(9).fill("");
+      currentPlayerTurn = data.currentPlayer;
+      const players = data.players || {};
+
+      // Detect game end
+      if (checkWin(board, playerSymbol)) {
+        statusDiv.innerText = "You won! 🎉";
+        gameActive = false;
+      } else if (checkWin(board, (playerSymbol === "X" ? "O" : "X"))) {
+        statusDiv.innerText = "You lost! 😢";
+        gameActive = false;
+      } else if (checkDraw(board)) {
+        statusDiv.innerText = "It's a draw!";
+        gameActive = false;
+      } else {
+        gameActive = true;
+        updateStatus();
+      }
+
+      updateBoardUI();
+
+      // If only one player, wait for opponent
+      if (Object.keys(players).length < 2) {
+        statusDiv.innerText = "Waiting for opponent to join...";
+        gameActive = false;
+      }
+    });
+  }
+
+  // Create room handler
+  createRoomBtn.onclick = () => {
+    const roomCode = Math.random().toString(36).slice(2, 6).toUpperCase();
+
+    // Set initial room data
+    db.ref(`rooms/${roomCode}`).set({
+      board: Array(9).fill(""),
+      currentPlayer: "X",
+      players: {
+        X: true
+      }
+    }).then(() => {
+      currentRoom = roomCode;
+      playerSymbol = "X";
+      gameDiv.style.display = "block";
+      createBoardUI();
+      listenToRoom(roomCode);
+      updateStatus("Room created! Code: " + roomCode + " — You are X");
+      console.log(roomCode);
+      roomInput.value = "";
+    });
+  };
+
+  // Join room handler
+  joinRoomBtn.onclick = () => {
+    const code = roomInput.value.trim().toUpperCase();
+    if (code.length !== 4) {
+      alert("Please enter a valid 4-letter room code.");
+      return;
+    }
+    db.ref(`rooms/${code}`).once("value").then(snapshot => {
+      if (!snapshot.exists()) {
+        alert("Room not found.");
+        return;
+      }
+      const data = snapshot.val();
+      const players = data.players || {};
+
+      if (Object.keys(players).length >= 2) {
+        alert("Room is full.");
+        return;
+      }
+
+      currentRoom = code;
+      playerSymbol = players.X ? "O" : "X";
+
+      // Add player to room
+      db.ref(`rooms/${code}/players/${playerSymbol}`).set(true);
+
+      gameDiv.style.display = "block";
+      createBoardUI();
+      listenToRoom(code);
+      updateStatus("Joined room: " + code + " — You are " + playerSymbol);
+      roomInput.value = "";
+    }).catch(err => {
+      console.error("Error joining room:", err);
+      alert("Failed to join room.");
+    });
+  };
+
+  // Reset game button
+  resetBtn.onclick = (event) => {
+    event.preventDefault();
+    if (!currentRoom) return;
+    db.ref(`rooms/${currentRoom}`).once("value").then(snapshot => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      db.ref(`rooms/${currentRoom}`).update({
+        board: Array(9).fill(""),
+        currentPlayer: "X"
+      });
+      gameActive = true;
+      updateStatus();
+    }).catch(err => {
+      console.error("Error resetting game:", err);
+      alert("Failed to reset game.");
+    });
+  };
+</script>
+
+</body>
+</html>
